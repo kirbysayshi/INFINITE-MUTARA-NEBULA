@@ -69,6 +69,7 @@ var Boot = () => {
         resolve(v);
       }
       v.addEventListener('loadedmetadata', onloaded);
+      v.setAttribute('playsinline', '');
       v.src = url;
     })
   };
