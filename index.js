@@ -54,27 +54,23 @@ var o_o = (name, props={}, children=[]) => {
   return el;
 }
 
-var Boot = () => {
+var Boot = async (onProgress=()=>{}) => {
 
-  var urlFromBuffer = (buf) => window.URL.createObjectURL(
-    new Blob([buf], { type: 'video/mp4' })
+  var urlFromChunks = (chunks) => window.URL.createObjectURL(
+    new Blob(chunks, { type: 'video/mp4' })
   );
 
-  var videoFromUrl = (url) => {
-    return new Promise((resolve, reject) => {
-      var v = document.createElement('video');
-      var onloaded = () => {
-        v.removeEventListener('loadedmetadata', onloaded);
-        v.volume = 0;
-        resolve(v);
-      }
-      v.addEventListener('loadedmetadata', onloaded);
-      v.setAttribute('playsinline', '');
-      v.src = url;
-    })
-  };
+  var videoFromUrl = (url) => new Promise((resolve) => {
+    var v = document.createElement('video');
+    v.addEventListener('loadedmetadata', () => {
+      v.volume = 0;
+      resolve(v);
+    }, { once: true });
+    v.setAttribute('playsinline', '');
+    v.src = url;
+  });
 
-  var clips = [
+  var sources = [
     ["clips/clip-1.mp4", 0, 0],
     ["clips/clip-2.mp4", 0, 0],
     ["clips/clip-3.mp4", 0, 0],
@@ -83,21 +79,36 @@ var Boot = () => {
     ["clips/clip-6.mp4", 0, 0],
     ["clips/clip-7.mp4", 0, 0],
     ["clips/clip-8.mp4", 0, 0],
-  ].map(([url, startTime, endTime]) => fetch(url)
-    .then(res => {
-      if (!res.ok) throw new Error('NOT OK! ' + res.statusText);
-      return res.arrayBuffer();
-    })
-    .then(buf => urlFromBuffer(buf))
-    .then(url => videoFromUrl(url))
-    .then(video => ({
-      video,
-      startTime,
-      endTime: endTime || video.duration,
-    }))
-  );
+  ];
 
-  return Promise.all(clips);
+  var loaded = sources.map(() => 0);
+  var totals = sources.map(() => 0);
+  var report = () => {
+    var total = totals.reduce((a, b) => a + b, 0);
+    if (total > 0) onProgress(loaded.reduce((a, b) => a + b, 0) / total);
+  };
+
+  var loadClip = async ([url, startTime, endTime], i) => {
+    var res = await fetch(url);
+    if (!res.ok) throw new Error('NOT OK! ' + res.statusText);
+    totals[i] = parseInt(res.headers.get('Content-Length') || '0', 10);
+    report();
+
+    var reader = res.body.getReader();
+    var chunks = [];
+    while (true) {
+      var { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded[i] += value.length;
+      report();
+    }
+
+    var video = await videoFromUrl(urlFromChunks(chunks));
+    return { video, startTime, endTime: endTime || video.duration };
+  };
+
+  return Promise.all(sources.map(loadClip));
 };
 
 window.addEventListener('unhandledrejection', event => {
@@ -247,8 +258,8 @@ class App {
   mount (root) {
     this.state.root = root;
 
-    var spinner = root.querySelector('.loading-spinner');
-    if (spinner) spinner.remove();
+    var progress = root.querySelector('.loading-progress');
+    if (progress) progress.remove();
 
     var font = '9px/12px Arial, sans-serif';
 
@@ -505,7 +516,10 @@ class App {
   }
 }
 
-Boot().then(clips => {
+var bar = document.querySelector('#stage .loading-progress > .bar');
+Boot((ratio) => {
+  if (bar) bar.style.width = (ratio * 100).toFixed(1) + '%';
+}).then(clips => {
   var app = new App(clips);
   app.mount(document.querySelector('#stage'));
 }).catch(err => {
