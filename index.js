@@ -247,11 +247,8 @@ class App {
     else this.state.controlsFadeDelay = 1000;
 
     if (controls.panel) {
-      var scale = portrait
-        ? Math.max(1, Math.min(window.innerWidth, window.innerHeight) / 320)
-        : 1;
-      controls.panel.style.transform = 'scale(' + scale + ')';
-      controls.panel.style.transformOrigin = 'top left';
+      controls.panel.style.width = '100vw';
+      controls.panel.style.font = '10pt/12pt Arial, sans-serif';
     }
   }
 
@@ -260,8 +257,6 @@ class App {
 
     var progress = root.querySelector('.loading-progress');
     if (progress) progress.remove();
-
-    var font = '9px/12px Arial, sans-serif';
 
     applyStyle(this.state.root, {
       position: 'relative',
@@ -298,70 +293,132 @@ class App {
       ref: (el) => { this.state.controls.panel = el; },
       style: {
         position: 'absolute',
-        left: '20px',
-        top: '20px',
+        left: '0',
+        top: '0',
         padding: '10px',
-        transition: 'opacity 1s ease-out 0s',
+        boxSizing: 'border-box',
+        opacity: '0',
+        transition: 'opacity 0.2s ease-out 0s',
         zIndex: this.state.clips.length + 1,
         backgroundColor: '#333333',
         color: 'white',
-        font,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '10px',
       }
     }, [
       o_o('div', {
-        className: 'btn-wrap',
-        style: {
-          position: 'relative',
-          width: '50px',
-          height: '50px',
-          margin: 'auto',
-        }
+        className: 'controls-left',
+        style: { flex: '0 0 auto' },
       }, [
-        o_o('button', {
-          className: 'play-btn',
-          ref: el => { this.state.controls.playBtn = el },
-          onclick: () => this.togglePlay(),
+        o_o('div', {
+          className: 'btn-wrap',
           style: {
-            font,
-            textAlign: 'center',
-            color: '#333333',
-            padding: '0',
-            margin: '0',
-            width: '100%',
-            height: '100%',
-            border: '2px solid #333333',
-            borderRadius: '100% 100% 100% 100%',
+            position: 'relative',
+            width: '36px',
+            height: '36px',
+            margin: 'auto',
           }
-        }),
+        }, [
+          o_o('button', {
+            className: 'play-btn',
+            ref: el => { this.state.controls.playBtn = el },
+            onclick: () => this.togglePlay(),
+            style: {
+              font: 'inherit',
+              textAlign: 'center',
+              color: 'white',
+              padding: '0',
+              margin: '0',
+              width: '100%',
+              height: '100%',
+              appearance: 'none',
+              backgroundColor: 'transparent',
+              outline: '2px solid white',
+              border: 0,
+              borderRadius: '100% 100% 100% 100%',
+            }
+          }),
+        ]),
+
+        o_o('div', {
+          style: {
+            paddingTop: '10px',
+          }
+        }, [
+          CheckboxEl('SEQUENTIAL', ({ target: { checked } }) => {
+            this.state.options.sequential = !!checked;
+          }),
+          CheckboxEl('RANDOM 2 SECONDS', ({ target: { checked } }) => {
+            this.state.options.random2sec = !!checked;
+            this.state.scheduler.skip();
+          }, (el) => {
+            this.state.options.random2sec = true;
+            el.setAttribute('checked', 'checked');
+          }),
+          CheckboxEl('SOUND', ({ target: { checked } }) => {
+            this.state.options.sound = !!checked;
+            this.toggleSound();
+          }),
+        ]),
       ]),
 
       o_o('div', {
+        className: 'controls-about',
         style: {
-          paddingTop: '10px',
-        }
+          flex: '0 1 auto',
+          minWidth: '0',
+          borderLeft: '1px solid #555555',
+          paddingLeft: '10px',
+          lineHeight: '1.4',
+          overflowWrap: 'break-word',
+        },
       }, [
-        CheckboxEl('SEQUENTIAL', ({ target: { checked } }) => {
-          this.state.options.sequential = !!checked;
-        }),
-        CheckboxEl('RANDOM 2 SECONDS', ({ target: { checked } }) => {
-          this.state.options.random2sec = !!checked;
-          this.state.scheduler.skip();
-        }, (el) => {
-          this.state.options.random2sec = true;
-          el.setAttribute('checked', 'checked');
-        }),
-        CheckboxEl('SOUND', ({ target: { checked } }) => {
-          this.state.options.sound = !!checked;
-          this.toggleSound();
-        }),
+        `During a recent viewing of Wrath of Khan, I was struck with how playful
+        the ship coreography was. Now you get to watch these forever! Best experienced
+        on a large monitor.`,
+        o_o('p', {}, [
+          `I find the 2 second clip version the most humorous, like these ships are giant cats.`
+        ]),
+        o_o('p', {}, [
+          `Sequential: play the clips in the order they are played in the movie.`
+        ]),
+        o_o('p', {}, [
+          `Random 2 Seconds: play random 2 second snippets of each clip intead of the entire clip.`
+        ]),
+        o_o('p', {}, [
+          `Sound: Immerse yourself!`
+        ]),
       ]),
 
     ]);
 
-    this.state.root.onmousemove = () => this.showControls();
-    this.state.root.onclick = () => this.showControls();
-
     this.state.root.appendChild(controlsDiv);
+
+    var toggleBtn = o_o('button', {
+      className: 'controls-toggle',
+      ref: el => { this.state.controls.toggleBtn = el },
+      onclick: () => this.togglePanel(),
+      style: {
+        position: 'absolute',
+        left: '10px',
+        top: '10px',
+        width: '36px',
+        height: '36px',
+        padding: '0',
+        margin: '0',
+        outline: '2px solid white',
+        border: 0,
+        borderRadius: '50%',
+        backgroundColor: 'rgb(74, 74, 74, 0)',
+        color: 'white',
+        font: 'bold 16pt/1 Arial, sans-serif',
+        cursor: 'pointer',
+        zIndex: this.state.clips.length + 2,
+        opacity: 0.2
+      },
+    }, ['?']);
+    this.state.root.appendChild(toggleBtn);
 
     this.state.scheduler = new Scheduler();
     const { scheduler } = this.state;
@@ -406,7 +463,7 @@ class App {
     window.addEventListener('orientationchange', () => this.applyLayout());
 
     this.toggleSound();
-    this.showControls();
+    this.hideControls();
     this.play();
   }
 
@@ -471,13 +528,13 @@ class App {
   }
 
   pause () {
-    this.state.controls.playBtn.innerHTML = '&#9654;';
+    this.state.controls.playBtn.innerHTML = '▶︎';
     this.state.scheduler.pause();
     return this.getActive().video.pause();
   }
 
   play () {
-    this.state.controls.playBtn.innerHTML = '&#9646;&#9646;';
+    this.state.controls.playBtn.innerHTML = '⏸︎';
     this.state.scheduler.start();
     return this.getActive().video.play();
   }
@@ -504,15 +561,22 @@ class App {
     });
   }
 
-  showControls () {
+  togglePanel () {
     var { panel } = this.state.controls;
-    if (this.state.controlsFade) clearTimeout(this.state.controlsFade);
-    panel.style.opacity = '1';
-    this.state.controlsFade = setTimeout(() => {
-      var { panel } = this.state.controls;
-      panel.style.opacity = '0';
-      this.state.controlsFade = null;
-    }, this.state.controlsFadeDelay);
+    if (panel.style.opacity === '1') this.hideControls();
+    else this.showControls();
+  }
+
+  showControls () {
+    this.state.controls.panel.style.opacity = '1';
+    this.state.controls.toggleBtn.textContent = 'X'
+    this.state.controls.toggleBtn.style.opacity = 0.7;
+  }
+
+  hideControls () {
+    this.state.controls.panel.style.opacity = '0';
+    this.state.controls.toggleBtn.textContent = '?';
+    this.state.controls.toggleBtn.style.opacity = 0.4;
   }
 }
 
