@@ -4,56 +4,6 @@ var debug = (prefix) => localStorage[prefix]
   }
   : () => {};
 
-var applyStyle = (el, props) => {
-  Object.keys(props).forEach(name => {
-    el.style[name] = props[name];
-  });
-  return el;
-}
-
-var o_o = (name, props={}, children=[]) => {
-  var el = document.createElement(name);
-  var ref;
-  Object.keys(props).forEach(name => {
-    // Ref callbacks to ease... getting a ref
-    if (name == 'ref' && typeof props[name] === 'function') {
-      ref = props[name];
-    }
-    if (name === 'style') {
-      applyStyle(el, props[name]);
-    } else {
-      // Attributes
-      if (
-        name === 'for'
-        || name === 'type'
-        || name === 'selected'
-        || name === 'checked'
-      ) {
-        if (props[name]) {
-          el.setAttribute(name, props[name]);
-        } else {
-          // Attributes must be removed, not just set to false.
-          el.removeAttribute(name);
-        }
-      } else {
-        // An actual prop.
-        el[name] = props[name];
-      }
-    }
-  });
-  children.forEach(child => {
-    if (child instanceof Element) el.appendChild(child);
-    else {
-      var t = document.createElement('text');
-      t.textContent = child;
-      el.appendChild(t);
-    }
-  })
-  // Only call the ref callback once the children are there.
-  if (ref) ref(el);
-  return el;
-}
-
 var Boot = async (onProgress=()=>{}) => {
 
   var urlFromChunks = (chunks) => window.URL.createObjectURL(
@@ -66,7 +16,9 @@ var Boot = async (onProgress=()=>{}) => {
       v.volume = 0;
       resolve(v);
     }, { once: true });
+    v.setAttribute('muted', '');
     v.setAttribute('playsinline', '');
+    v.className = 'stage__video';
     v.src = url;
   });
 
@@ -118,26 +70,6 @@ window.addEventListener('unhandledrejection', event => {
 
 
 var dbg = debug('mutara');
-
-function CheckboxEl (label, onchange, onRef=()=>{}) {
-  return o_o('label', {
-    style: { display: 'block', }
-  }, [
-    o_o('input', {
-      type: 'checkbox',
-      onchange,
-      ref: onRef,
-      style: {
-        verticalAlign: 'middle',
-      }
-    }),
-    o_o('span', {
-      style: {
-        verticalAlign: 'middle',
-      }
-    }, [label]),
-  ])
-}
 
 class Scheduler {
 
@@ -202,219 +134,38 @@ class App {
   constructor (clips) {
     this.state = {
       clips,
-      controls: {},
-      root: null,
-      options: {
-        random2sec: false,
-        sequential: false,
-        sound: false,
-      },
+      options: { random2sec: false, sequential: false, sound: false },
       scheduler: null,
-    }
-  }
-
-  isPortrait () {
-    return window.innerHeight > window.innerWidth;
-  }
-
-  applyLayout () {
-    var { clips, controls } = this.state;
-    var portrait = this.isPortrait();
-
-    clips.forEach((clip) => {
-      if (portrait) {
-        applyStyle(clip.video, {
-          minHeight: '',
-          minWidth: '',
-          width: '100%',
-          height: 'auto',
-          maxHeight: '100%',
-        });
-      } else {
-        applyStyle(clip.video, {
-          minHeight: '100%',
-          minWidth: '100%',
-          width: '',
-          height: '',
-          maxHeight: '',
-        });
-      }
-    });
-
-    if (controls.panel) {
-      controls.panel.style.width = '100vw';
-      controls.panel.style.font = '10pt/12pt Arial, sans-serif';
-    }
+      els: {},
+    };
   }
 
   mount (root) {
-    this.state.root = root;
+    var els = this.state.els = {
+      root,
+      videos: root.querySelector('[data-videos]'),
+      panel: root.querySelector('[data-panel]'),
+      toggleBtn: root.querySelector('[data-toggle]'),
+      playBtn: root.querySelector('[data-play]'),
+    };
 
-    var progress = root.querySelector('.loading-progress');
-    if (progress) progress.remove();
-
-    applyStyle(this.state.root, {
-      position: 'relative',
-      height: '100vh',
-      overflow: 'hidden',
+    this.state.clips.forEach((clip, idx, all) => {
+      clip.video.style.zIndex = all.length - idx;
+      els.videos.appendChild(clip.video);
     });
 
-    var clipsDiv = o_o('div', {
-      style: {
-        position: 'absolute',
-        left: '0px',
-        top: '0px',
-        width: '100%',
-        height: '100%',
-      },
-    }, [
-      ...this.state.clips.map((clip, idx, clips) => {
-        return applyStyle(clip.video, {
-          // old centering trick before object-fit
-          position: 'absolute',
-          top: '-999999px',
-          right: '-999999px',
-          bottom: '-999999px',
-          left: '-999999px',
-          margin: 'auto',
-          zIndex: clips.length - idx,
-        })
-      })
-    ]);
+    els.toggleBtn.addEventListener('click', () => this.togglePanel());
+    els.playBtn.addEventListener('click', () => this.togglePlay());
 
-    this.state.root.appendChild(clipsDiv);
-
-    var controlsDiv = o_o('div', {
-      className: 'controls',
-      ref: (el) => { this.state.controls.panel = el; },
-      style: {
-        position: 'absolute',
-        left: '0',
-        top: '0',
-        padding: '10px',
-        boxSizing: 'border-box',
-        opacity: '0',
-        transition: 'opacity 0.2s ease-out 0s',
-        zIndex: this.state.clips.length + 1,
-        backgroundColor: '#333333',
-        color: 'white',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '10px',
-      }
-    }, [
-      o_o('div', {
-        className: 'controls-left',
-        style: { flex: '0 0 auto' },
-      }, [
-        o_o('div', {
-          className: 'btn-wrap',
-          style: {
-            position: 'relative',
-            width: '36px',
-            height: '36px',
-            margin: 'auto',
-          }
-        }, [
-          o_o('button', {
-            className: 'play-btn',
-            ref: el => { this.state.controls.playBtn = el },
-            onclick: () => this.togglePlay(),
-            style: {
-              font: 'inherit',
-              textAlign: 'center',
-              color: 'white',
-              padding: '0',
-              margin: '0',
-              width: '100%',
-              height: '100%',
-              appearance: 'none',
-              backgroundColor: 'transparent',
-              outline: '2px solid white',
-              border: 0,
-              borderRadius: '100% 100% 100% 100%',
-            }
-          }),
-        ]),
-
-        o_o('div', {
-          style: {
-            paddingTop: '10px',
-          }
-        }, [
-          CheckboxEl('SEQUENTIAL', ({ target: { checked } }) => {
-            this.state.options.sequential = !!checked;
-          }),
-          CheckboxEl('RANDOM 2 SECONDS', ({ target: { checked } }) => {
-            this.state.options.random2sec = !!checked;
-            this.state.scheduler.skip();
-          }, (el) => {
-            this.state.options.random2sec = true;
-            el.setAttribute('checked', 'checked');
-          }),
-          CheckboxEl('SOUND', ({ target: { checked } }) => {
-            this.state.options.sound = !!checked;
-            this.toggleSound();
-          }),
-        ]),
-      ]),
-
-      o_o('div', {
-        className: 'controls-about',
-        style: {
-          flex: '0 1 auto',
-          minWidth: '0',
-          borderLeft: '1px solid #555555',
-          paddingLeft: '10px',
-          lineHeight: '1.4',
-          overflowWrap: 'break-word',
-        },
-      }, [
-        `During a recent viewing of Wrath of Khan, I was struck with how playful
-        the ship coreography was. Now you get to watch these forever! Best experienced
-        on a large monitor.`,
-        o_o('p', {}, [
-          `I find the 2 second clip version the most humorous, like these ships are giant cats.`
-        ]),
-        o_o('p', {}, [
-          `Sequential: play the clips in the order they are played in the movie.`
-        ]),
-        o_o('p', {}, [
-          `Random 2 Seconds: play random 2 second snippets of each clip intead of the entire clip.`
-        ]),
-        o_o('p', {}, [
-          `Sound: Immerse yourself!`
-        ]),
-      ]),
-
-    ]);
-
-    this.state.root.appendChild(controlsDiv);
-
-    var toggleBtn = o_o('button', {
-      className: 'controls-toggle',
-      ref: el => { this.state.controls.toggleBtn = el },
-      onclick: () => this.togglePanel(),
-      style: {
-        position: 'absolute',
-        left: '10px',
-        top: '10px',
-        width: '36px',
-        height: '36px',
-        padding: '0',
-        margin: '0',
-        outline: '2px solid white',
-        border: 0,
-        borderRadius: '50%',
-        backgroundColor: 'rgb(74, 74, 74, 0)',
-        color: 'white',
-        font: 'bold 16pt/1 Arial, sans-serif',
-        cursor: 'pointer',
-        zIndex: this.state.clips.length + 2,
-        opacity: 0.2
-      },
-    }, ['?']);
-    this.state.root.appendChild(toggleBtn);
+    els.panel.querySelectorAll('input[data-option]').forEach(input => {
+      var key = input.dataset.option;
+      this.state.options[key] = input.checked;
+      input.addEventListener('change', () => {
+        this.state.options[key] = input.checked;
+        if (key === 'random2sec') this.state.scheduler.skip();
+        if (key === 'sound') this.applySound();
+      });
+    });
 
     this.state.scheduler = new Scheduler();
     const { scheduler } = this.state;
@@ -436,37 +187,28 @@ class App {
         dbg('playing next');
         let curr = this.getActive();
 
-        next.video.onplay = () => {
-          dbg('onplay');
-        }
-
+        next.video.onplay = () => { dbg('onplay'); };
         next.video.onplaying = () => {
           dbg('onplaying');
           this.bringToFront(next);
           curr.video.pause();
-        }
+        };
         next.video.play();
 
         let nextSeekTime = scheduler.currentTime + (plot.durationMs - seekTime);
         scheduler.queueEvent(nextEvent, nextSeekTime);
       }, scheduler.currentTime + seekTime + amtEarly);
-    }
+    };
 
-    this.state.scheduler.queueEvent(nextEvent, plot.durationMs - seekTime);
+    scheduler.queueEvent(nextEvent, plot.durationMs - seekTime);
 
-    this.applyLayout();
-    window.addEventListener('resize', () => this.applyLayout());
-    window.addEventListener('orientationchange', () => this.applyLayout());
-
-    this.toggleSound();
-    this.hideControls();
+    this.applySound();
     this.play();
   }
 
   chooseNext () {
     var { clips, options } = this.state;
     var active = this.getActive();
-
     var next = active;
 
     if (options.sequential) {
@@ -477,16 +219,13 @@ class App {
         next = clips[Math.floor(Math.random() * clips.length)];
       }
     }
-
     return next;
   }
 
   bringToFront (clip) {
     var { clips } = this.state;
-    clips.forEach((clip, i) => applyStyle(clip.video, {
-      zIndex: i
-    }));
-    applyStyle(clip.video, { zIndex: clips.length });
+    clips.forEach((c, i) => { c.video.style.zIndex = i; });
+    clip.video.style.zIndex = clips.length;
   }
 
   getActive () {
@@ -497,18 +236,8 @@ class App {
   }
 
   plotClipTime (clip, options) {
-    var {
-      endTime,
-      startTime,
-      video: { currentTime, duration }
-    } = clip;
-
-    var plot = {
-      startTime: startTime,
-      endTime: endTime,
-      duration: 0,
-      durationMs: 0,
-    };
+    var { endTime, startTime } = clip;
+    var plot = { startTime, endTime, duration: 0, durationMs: 0 };
 
     if (options.random2sec) {
       var min = 2;
@@ -518,72 +247,55 @@ class App {
 
     plot.duration = plot.endTime - plot.startTime;
     plot.durationMs = plot.duration * 1000;
-
-    //dbg('plot %o for clip %o', plot, clip);
     return plot;
   }
 
   pause () {
-    this.state.controls.playBtn.innerHTML = '▶︎';
+    this.state.els.playBtn.textContent = '▶︎';
     this.state.scheduler.pause();
     return this.getActive().video.pause();
   }
 
   play () {
-    this.state.controls.playBtn.innerHTML = '⏸︎';
+    this.state.els.playBtn.textContent = '⏸︎';
     this.state.scheduler.start();
     return this.getActive().video.play();
   }
 
-  isPaused () {
-    var { video } = this.getActive();
-    if (video.paused) { return true }
-    else { return false }
-  }
-
   togglePlay () {
-    if (this.isPaused()) {
-      this.play();
-    } else {
-      this.pause();
-    }
+    if (this.getActive().video.paused) this.play();
+    else this.pause();
   }
 
-  toggleSound () {
+  applySound () {
     var { sound } = this.state.options;
-    var { clips } = this.state;
-    clips.forEach(({ video }) => {
+    this.state.clips.forEach(({ video }) => {
       video.volume = sound ? 1 : 0;
     });
   }
 
   togglePanel () {
-    var { panel } = this.state.controls;
-    if (panel.style.opacity === '1') this.hideControls();
-    else this.showControls();
-  }
-
-  showControls () {
-    this.state.controls.panel.style.opacity = '1';
-    this.state.controls.toggleBtn.textContent = 'X'
-    this.state.controls.toggleBtn.style.opacity = 0.7;
-  }
-
-  hideControls () {
-    this.state.controls.panel.style.opacity = '0';
-    this.state.controls.toggleBtn.textContent = '?';
-    this.state.controls.toggleBtn.style.opacity = 0.4;
+    var { panel, toggleBtn } = this.state.els;
+    var hidden = panel.classList.toggle('controls--hidden');
+    toggleBtn.classList.toggle('toggle-btn--open', !hidden);
+    toggleBtn.textContent = hidden ? '?' : 'X';
   }
 }
 
-var bar = document.querySelector('#stage .loading-progress > .bar');
-Boot((ratio) => {
-  if (bar) bar.style.width = (ratio * 100).toFixed(1) + '%';
-}).then(clips => {
-  var app = new App(clips);
-  app.mount(document.querySelector('#stage'));
-}).catch(err => {
-  console.log('err?', err);
-  alert('boot error ' + err.message)
-});
+(async function() {
+  try {
+    const onProgressReport = (ratio) => {
+      var bar = document.querySelector('[data-loading-bar]');
+      if (bar) bar.style.width = (ratio * 100).toFixed(1) + '%';
+    }
 
+    const clips = await Boot(onProgressReport);
+    document.querySelector('[data-loading]').remove();
+    var app = new App(clips);
+    app.mount(document.querySelector('#stage'));
+
+  } catch(err) {
+    console.log('err?', err);
+    alert('boot error ' + err.message)
+  }
+}());

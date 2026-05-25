@@ -4,29 +4,7 @@
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>~ ~ ~ I N F I N I T E ~ ~ M U T A R A ~ ~ N E B U L A ~ ~ ~</title>
-<style type="text/css">
-html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
-:focus { outline: none; }
-#stage { width: 100%; height: 100%; background-color: black; position: relative; }
-#stage .loading-progress {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 60%;
-  max-width: 400px;
-  height: 4px;
-  transform: translate(-50%, -50%);
-  background-color: #2a1a33;
-  border-radius: 2px;
-  overflow: hidden;
-}
-#stage .loading-progress > .bar {
-  height: 100%;
-  width: 0%;
-  background-color: #caacd4;
-  transition: width 0.2s ease-out;
-}
-</style>
+  <link rel="stylesheet" href="styles.css">
 <!-- Global Site Tag (gtag.js) - Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=UA-9588164-1"></script>
 <script>
@@ -38,8 +16,39 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 </script>
 </head>
 <body>
-<div id="stage">
-  <div class="loading-progress"><div class="bar"></div></div>
+<div id="stage" class="stage">
+  <div class="loading" data-loading><div class="loading__bar" data-loading-bar></div></div>
+  <div class="stage__videos" data-videos></div>
+  <button class="toggle-btn" data-toggle>?</button>
+  <div class="controls controls--hidden" data-panel>
+    <div class="controls__col">
+      <button class="controls__playbtn" data-play></button>
+      <div class="controls__options">
+        <label class="controls__option">
+          <input type="checkbox" autocomplete="off" data-option="sequential">
+          <span>SEQUENTIAL</span>
+        </label>
+        <label class="controls__option">
+          <input type="checkbox" autocomplete="off" data-option="random2sec" checked>
+          <span>RANDOM 2 SECONDS</span>
+        </label>
+        <label class="controls__option">
+          <input type="checkbox" autocomplete="off" data-option="sound">
+          <span>SOUND</span>
+        </label>
+      </div>
+    </div>
+    <div class="controls__about">
+      During a recent viewing of Wrath of Khan, I was struck with how playful
+      the ship coreography was. Now you get to watch these forever! Best experienced
+      on a large monitor.
+      <p>I find the 2 second clip version the most humorous, like these ships are giant cats.</p>
+      <p><b>Sequential</b>: play the clips in the order they are played in the movie.</p>
+      <p><b>Random 2 Seconds</b>: play random 2 second snippets of each clip intead of the entire clip.</p>
+      <p><b>Sound</b>: Immerse yourself!</p>
+    </div>
+  </div>
+
 </div>
 <script type="text/javascript" src="index.js"></script>
 </body>
