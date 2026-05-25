@@ -204,8 +204,51 @@ class App {
     }
   }
 
+  isPortrait () {
+    return window.innerHeight > window.innerWidth;
+  }
+
+  applyLayout () {
+    var { clips, controls } = this.state;
+    var portrait = this.isPortrait();
+
+    clips.forEach((clip) => {
+      if (portrait) {
+        applyStyle(clip.video, {
+          minHeight: '',
+          minWidth: '',
+          width: '100%',
+          height: 'auto',
+          maxHeight: '100%',
+        });
+      } else {
+        applyStyle(clip.video, {
+          minHeight: '100%',
+          minWidth: '100%',
+          width: '',
+          height: '',
+          maxHeight: '',
+        });
+      }
+    });
+
+    if (portrait) this.state.controlsFadeDelay = 5000;
+    else this.state.controlsFadeDelay = 1000;
+
+    if (controls.panel) {
+      var scale = portrait
+        ? Math.max(1, Math.min(window.innerWidth, window.innerHeight) / 320)
+        : 1;
+      controls.panel.style.transform = 'scale(' + scale + ')';
+      controls.panel.style.transformOrigin = 'top left';
+    }
+  }
+
   mount (root) {
     this.state.root = root;
+
+    var spinner = root.querySelector('.loading-spinner');
+    if (spinner) spinner.remove();
 
     var font = '9px/12px Arial, sans-serif';
 
@@ -231,8 +274,6 @@ class App {
           right: '-999999px',
           bottom: '-999999px',
           left: '-999999px',
-          minHeight: '100%',
-          minWidth: '100%',
           margin: 'auto',
           zIndex: clips.length - idx,
         })
@@ -348,6 +389,10 @@ class App {
     }
 
     this.state.scheduler.queueEvent(nextEvent, plot.durationMs - seekTime);
+
+    this.applyLayout();
+    window.addEventListener('resize', () => this.applyLayout());
+    window.addEventListener('orientationchange', () => this.applyLayout());
 
     this.toggleSound();
     this.showControls();
