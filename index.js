@@ -203,8 +203,6 @@ class App {
     this.state = {
       clips,
       controls: {},
-      controlsFade: null,
-      controlsFadeDelay: 1000,
       root: null,
       options: {
         random2sec: false,
@@ -243,9 +241,6 @@ class App {
       }
     });
 
-    if (portrait) this.state.controlsFadeDelay = 5000;
-    else this.state.controlsFadeDelay = 1000;
-
     if (controls.panel) {
       controls.panel.style.width = '100vw';
       controls.panel.style.font = '10pt/12pt Arial, sans-serif';
@@ -275,6 +270,7 @@ class App {
     }, [
       ...this.state.clips.map((clip, idx, clips) => {
         return applyStyle(clip.video, {
+          // old centering trick before object-fit
           position: 'absolute',
           top: '-999999px',
           right: '-999999px',
