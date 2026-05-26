@@ -6,9 +6,8 @@ var debug = (prefix) => localStorage[prefix]
 
 var Boot = async (onProgress=()=>{}) => {
 
-  var urlFromChunks = (chunks) => window.URL.createObjectURL(
-    new Blob(chunks, { type: 'video/mp4' })
-  );
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var audioCtx = new AC();
 
   var videoFromUrl = (url) => new Promise((resolve) => {
     var v = document.createElement('video');
@@ -56,11 +55,26 @@ var Boot = async (onProgress=()=>{}) => {
       report();
     }
 
-    var video = await videoFromUrl(urlFromChunks(chunks));
-    return { video, startTime, endTime: endTime || video.duration };
+    var blob = new Blob(chunks, { type: 'video/mp4' });
+    var video = await videoFromUrl(window.URL.createObjectURL(blob));
+
+    // We decode the audio separately in order to allow multiple videos with
+    // sound to play at the same time on iOS.
+    var audioBuffer = null;
+    try {
+      var arrayBuf = await blob.arrayBuffer();
+      audioBuffer = await new Promise((resolve, reject) =>
+        audioCtx.decodeAudioData(arrayBuf, resolve, reject)
+      );
+    } catch (e) {
+      dbg('audio decode failed', url, e);
+    }
+
+    return { video, audioBuffer, startTime, endTime: endTime || video.duration };
   };
 
-  return Promise.all(sources.map(loadClip));
+  var clips = await Promise.all(sources.map(loadClip));
+  return { audioCtx, clips };
 };
 
 window.addEventListener('unhandledrejection', event => {
@@ -136,9 +150,11 @@ class Scheduler {
 
 class App {
 
-  constructor (clips) {
+  constructor (clips, audioCtx) {
     this.state = {
       clips,
+      audioCtx,
+      audio: null,
       options: { random2sec: false, sequential: false, sound: false },
       scheduler: null,
       els: {},
@@ -223,6 +239,7 @@ class App {
 
           this.state.activeClip = next;
           curr.video.pause();
+          this.startAudio(next, nextPlot.startTime);
           estimatedPrerollMs = Math.max(50, performance.now() - prepStart);
           dbg(
             'scheduling',
@@ -306,14 +323,46 @@ class App {
     else this.pause();
   }
 
+  initAudioGraph () {
+    if (this.state.audio) return;
+    var ctx = this.state.audioCtx;
+    var master = ctx.createGain();
+    master.gain.value = 0;
+    master.connect(ctx.destination);
+    this.state.audio = { ctx, master, activeSource: null };
+  }
+
+  stopAudio () {
+    var a = this.state.audio;
+    if (a && a.activeSource) {
+      try { a.activeSource.stop(); } catch (e) {}
+      a.activeSource = null;
+    }
+  }
+
+  startAudio (clip, offset) {
+    if (!this.state.options.sound || !this.state.audio) return;
+    this.stopAudio();
+    if (!clip.audioBuffer) return;
+    var { ctx, master } = this.state.audio;
+    var src = ctx.createBufferSource();
+    src.buffer = clip.audioBuffer;
+    src.connect(master);
+    src.start(0, offset);
+    this.state.audio.activeSource = src;
+  }
+
   applySound () {
-    var { sound } = this.state.options;
-    this.state.clips.forEach(({ video }) => {
-      video.muted = !sound;
-      if (sound) video.removeAttribute('muted');
-      else video.setAttribute('muted', '');
-    });
-    if (sound) this.getActive().video.play();
+    this.initAudioGraph();
+    var { ctx, master } = this.state.audio;
+    if (ctx.state === 'suspended') ctx.resume();
+    master.gain.value = this.state.options.sound ? 1 : 0;
+    if (this.state.options.sound) {
+      var active = this.getActive();
+      this.startAudio(active, active.video.currentTime);
+    } else {
+      this.stopAudio();
+    }
   }
 
   togglePanel () {
@@ -331,9 +380,9 @@ class App {
       if (bar) bar.style.width = (ratio * 100).toFixed(1) + '%';
     }
 
-    const clips = await Boot(onProgressReport);
+    const { audioCtx, clips } = await Boot(onProgressReport);
     document.querySelector('[data-loading]').remove();
-    var app = new App(clips);
+    var app = new App(clips, audioCtx);
     app.mount(document.querySelector('#stage'));
 
   } catch(err) {
