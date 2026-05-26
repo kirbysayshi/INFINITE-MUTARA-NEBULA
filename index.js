@@ -206,7 +206,12 @@ class App {
       const next = this.chooseNext();
       const nextPlot = this.plotClipTime(next, this.state.options);
 
-      next.video.addEventListener('seeked', () => {
+      // from https://developer.apple.com/documentation/webkitjs/htmlmediaelement:
+      //
+      // > `seeking`: Sent when the seeking property is set to true and there is time to send this event.
+      //
+      // which means... no guarantee ios will send it! Switching to timeupdate instead.
+      next.video.addEventListener('timeupdate', () => {
         next.video.addEventListener('playing', () => {
           next.video.requestVideoFrameCallback(() => {
             this.state.activeClip = next;
