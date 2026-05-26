@@ -159,6 +159,7 @@ class App {
       els.videos.appendChild(clip.video);
     });
 
+    els.videos.style.opacity = 0;
     els.renderer.style.zIndex = '100';
     this.state.activeClip = this.state.clips[0];
 
@@ -193,6 +194,7 @@ class App {
     const scheduler = this.state.scheduler = new Scheduler();
     let estimatedPrerollMs = 200; // track device-timing for seek+play+frame
     let swapping = false;
+    let firstSwap = true;
 
     const swapEvent = () => {
       if (swapping) {
@@ -206,31 +208,35 @@ class App {
       const next = this.chooseNext();
       const nextPlot = this.plotClipTime(next, this.state.options);
 
-      // from https://developer.apple.com/documentation/webkitjs/htmlmediaelement:
-      //
-      // > `seeking`: Sent when the seeking property is set to true and there is time to send this event.
-      //
-      // which means... no guarantee ios will send it! Switching to timeupdate instead.
-      next.video.addEventListener('timeupdate', () => {
-        next.video.addEventListener('playing', () => {
-          next.video.requestVideoFrameCallback(() => {
-            this.state.activeClip = next;
-            curr.video.pause();
-            estimatedPrerollMs = Math.max(50, performance.now() - prepStart);
-            dbg(
-              'scheduling',
-              'preroll', estimatedPrerollMs,
-              'currentTime', scheduler.currentTime,
-              'next.duration', nextPlot.durationMs
-            );
-            const nextTime = scheduler.currentTime + nextPlot.durationMs - estimatedPrerollMs;
-            scheduler.queueEvent(swapEvent, nextTime);
-            swapping = false;
-          })
-        }, { once: true })
-        next.video.play();
+      // iOS doesn't emit seeked/timeupdate events until the <video> is
+      // _playing_, even if seeked while it's paused! Therefore, we have to play
+      // it first before waiting for events.
+      next.video.addEventListener('seeked', () => {
+        next.video.requestVideoFrameCallback(() => {
+          if (firstSwap) {
+            // We don't want the initial video that is currently sitting in the
+            // DOM to be seen frozen for a frame or two when we're about to kick
+            // off the actual first clip.
+            els.videos.style.opacity = 1;
+            firstSwap = false;
+          }
+
+          this.state.activeClip = next;
+          curr.video.pause();
+          estimatedPrerollMs = Math.max(50, performance.now() - prepStart);
+          dbg(
+            'scheduling',
+            'preroll', estimatedPrerollMs,
+            'currentTime', scheduler.currentTime,
+            'next.duration', nextPlot.durationMs
+          );
+          const nextTime = scheduler.currentTime + nextPlot.durationMs - estimatedPrerollMs;
+          scheduler.queueEvent(swapEvent, nextTime);
+          swapping = false;
+        })
       }, { once: true });
 
+      next.video.play();
       next.video.currentTime = nextPlot.startTime;
     };
 
@@ -241,7 +247,6 @@ class App {
       queueEvent(swapEvent, scheduler.currentTime);
     };
 
-    this.applySound();
     this.play();
   }
 
