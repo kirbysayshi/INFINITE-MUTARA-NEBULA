@@ -93,7 +93,6 @@ class Scheduler {
 
   start () {
     clearInterval(this.scheduled);
-    this.currentTime = 0;
     this.lastTime = Date.now();
     this.scheduled = setInterval(() => this._process(), this.processPoll);
   }
@@ -195,11 +194,12 @@ class App {
         };
         next.video.play();
 
-        let nextSeekTime = scheduler.currentTime + (plot.durationMs - seekTime);
+        let nextSeekTime = scheduler.currentTime + (nextPlot.durationMs - seekTime);
         scheduler.queueEvent(nextEvent, nextSeekTime);
       }, scheduler.currentTime + seekTime + amtEarly);
     };
 
+    scheduler.onEmpty = (queueEvent) => queueEvent(nextEvent, scheduler.currentTime);
     scheduler.queueEvent(nextEvent, plot.durationMs - seekTime);
 
     this.applySound();
@@ -271,6 +271,7 @@ class App {
     var { sound } = this.state.options;
     this.state.clips.forEach(({ video }) => {
       video.volume = sound ? 1 : 0;
+      video.removeAttribute('muted');
     });
   }
 
