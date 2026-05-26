@@ -309,10 +309,11 @@ class App {
   applySound () {
     var { sound } = this.state.options;
     this.state.clips.forEach(({ video }) => {
-      video.volume = sound ? 1 : 0;
+      video.muted = !sound;
       if (sound) video.removeAttribute('muted');
       else video.setAttribute('muted', '');
     });
+    if (sound) this.getActive().video.play();
   }
 
   togglePanel () {
