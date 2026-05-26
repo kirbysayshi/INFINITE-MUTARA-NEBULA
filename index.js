@@ -89,6 +89,11 @@ class Scheduler {
 
   queueEvent (cb, when) {
     this.queue.push({ cb, when });
+    dbg('new queue length', this.queue.length, 'latest when', when)
+  }
+
+  get running() {
+    return this.scheduled !== null;
   }
 
   start () {
@@ -99,6 +104,7 @@ class Scheduler {
 
   pause () {
     clearInterval(this.scheduled);
+    this.scheduled = null;
   }
 
   _process () {
@@ -112,7 +118,7 @@ class Scheduler {
     while (i < this.queue.length) {
       let { cb, when } = this.queue[i];
       if (when < forwardLimit) {
-        this.queue.shift();
+        this.queue.splice(i, 1);
         cb(when - this.currentTime);
         // do not increment i because we mutated the queue
       } else {
@@ -146,12 +152,15 @@ class App {
       panel: root.querySelector('[data-panel]'),
       toggleBtn: root.querySelector('[data-toggle]'),
       playBtn: root.querySelector('[data-play]'),
+      renderer: root.querySelector('[data-renderer]'),
     };
 
     this.state.clips.forEach((clip, idx, all) => {
-      clip.video.style.zIndex = all.length - idx;
       els.videos.appendChild(clip.video);
     });
+
+    els.renderer.style.zIndex = '100';
+    this.state.activeClip = this.state.clips[0];
 
     els.toggleBtn.addEventListener('click', () => this.togglePanel());
     els.playBtn.addEventListener('click', () => this.togglePlay());
@@ -166,6 +175,21 @@ class App {
       });
     });
 
+    const ctx = els.renderer.getContext('2d');
+    const render = () => {
+      let active = this.state.activeClip;
+      if (active && this.state.scheduler.running) {
+        let { videoWidth, videoHeight } = active.video;
+        if (videoWidth && videoHeight) {
+          if (els.renderer.width !== videoWidth) els.renderer.width = videoWidth;
+          if (els.renderer.height !== videoHeight) els.renderer.height = videoHeight;
+          ctx.drawImage(active.video, 0, 0, videoWidth, videoHeight);
+        }
+      }
+      requestAnimationFrame(render);
+    };
+    requestAnimationFrame(render);
+
     this.state.scheduler = new Scheduler();
     const { scheduler } = this.state;
 
@@ -173,34 +197,43 @@ class App {
     let plot = this.plotClipTime(curr, this.state.options);
     dbg('seeking curr')
     curr.video.currentTime = plot.startTime;
-    this.bringToFront(curr);
-    const seekTime = 1000;
 
-    const nextEvent = (amtEarly) => {
-      dbg('choosing next');
+    // Attempt to track how long the seek+play+frame events took on this device
+    let estimatedPrerollMs = 200;
+    let swapping = false;
+
+    const swapEvent = () => {
+      if (swapping) { dbg('swap already in flight, skipping'); return; }
+      swapping = true;
+      dbg('swap');
+      let prepStart = performance.now();
+      let curr = this.getActive();
       let next = this.chooseNext();
       let nextPlot = this.plotClipTime(next, this.state.options);
-      next.video.currentTime = nextPlot.startTime;
 
-      scheduler.queueEvent((amtEarly) => {
-        dbg('playing next');
-        let curr = this.getActive();
-
-        next.video.onplay = () => { dbg('onplay'); };
-        next.video.onplaying = () => {
-          dbg('onplaying');
-          this.bringToFront(next);
-          curr.video.pause();
-        };
+      next.video.addEventListener('seeked', () => {
+        next.video.addEventListener('playing', () => {
+          next.video.requestVideoFrameCallback(() => {
+            this.state.activeClip = next;
+            curr.video.pause();
+            estimatedPrerollMs = Math.max(50, performance.now() - prepStart);
+            dbg('scheduling', 'preroll', estimatedPrerollMs, 'currentTime', scheduler.currentTime, 'next.duration', nextPlot.durationMs);
+            scheduler.queueEvent(swapEvent, scheduler.currentTime + nextPlot.durationMs - estimatedPrerollMs);
+            swapping = false;
+          })
+        }, { once: true })
         next.video.play();
+      }, { once: true });
 
-        let nextSeekTime = scheduler.currentTime + (nextPlot.durationMs - seekTime);
-        scheduler.queueEvent(nextEvent, nextSeekTime);
-      }, scheduler.currentTime + seekTime + amtEarly);
+      next.video.currentTime = nextPlot.startTime;
     };
 
-    scheduler.onEmpty = (queueEvent) => queueEvent(nextEvent, scheduler.currentTime);
-    scheduler.queueEvent(nextEvent, plot.durationMs - seekTime);
+    scheduler.onEmpty = (queueEvent) => {
+      if (swapping) return;
+      dbg('onempty');
+      queueEvent(swapEvent, scheduler.currentTime);
+    };
+    scheduler.queueEvent(swapEvent, plot.durationMs - estimatedPrerollMs);
 
     this.applySound();
     this.play();
@@ -223,16 +256,11 @@ class App {
   }
 
   bringToFront (clip) {
-    var { clips } = this.state;
-    clips.forEach((c, i) => { c.video.style.zIndex = i; });
-    clip.video.style.zIndex = clips.length;
+    this.state.activeClip = clip;
   }
 
   getActive () {
-    var { clips } = this.state;
-    return clips.slice().sort((a, b) =>
-      parseInt(b.video.style.zIndex, 10) - parseInt(a.video.style.zIndex, 10)
-    )[0];
+    return this.state.activeClip;
   }
 
   plotClipTime (clip, options) {
@@ -271,7 +299,8 @@ class App {
     var { sound } = this.state.options;
     this.state.clips.forEach(({ video }) => {
       video.volume = sound ? 1 : 0;
-      video.removeAttribute('muted');
+      if (sound) video.removeAttribute('muted');
+      else video.setAttribute('muted', '');
     });
   }
 
