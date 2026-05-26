@@ -190,26 +190,21 @@ class App {
     };
     requestAnimationFrame(render);
 
-    this.state.scheduler = new Scheduler();
-    const { scheduler } = this.state;
-
-    let curr = this.getActive();
-    let plot = this.plotClipTime(curr, this.state.options);
-    dbg('seeking curr')
-    curr.video.currentTime = plot.startTime;
-
-    // Attempt to track how long the seek+play+frame events took on this device
-    let estimatedPrerollMs = 200;
+    const scheduler = this.state.scheduler = new Scheduler();
+    let estimatedPrerollMs = 200; // track device-timing for seek+play+frame
     let swapping = false;
 
     const swapEvent = () => {
-      if (swapping) { dbg('swap already in flight, skipping'); return; }
+      if (swapping) {
+        dbg('swap already in flight, skipping');
+        return;
+      }
       swapping = true;
       dbg('swap');
-      let prepStart = performance.now();
-      let curr = this.getActive();
-      let next = this.chooseNext();
-      let nextPlot = this.plotClipTime(next, this.state.options);
+      const prepStart = performance.now();
+      const curr = this.getActive();
+      const next = this.chooseNext();
+      const nextPlot = this.plotClipTime(next, this.state.options);
 
       next.video.addEventListener('seeked', () => {
         next.video.addEventListener('playing', () => {
@@ -217,8 +212,14 @@ class App {
             this.state.activeClip = next;
             curr.video.pause();
             estimatedPrerollMs = Math.max(50, performance.now() - prepStart);
-            dbg('scheduling', 'preroll', estimatedPrerollMs, 'currentTime', scheduler.currentTime, 'next.duration', nextPlot.durationMs);
-            scheduler.queueEvent(swapEvent, scheduler.currentTime + nextPlot.durationMs - estimatedPrerollMs);
+            dbg(
+              'scheduling',
+              'preroll', estimatedPrerollMs,
+              'currentTime', scheduler.currentTime,
+              'next.duration', nextPlot.durationMs
+            );
+            const nextTime = scheduler.currentTime + nextPlot.durationMs - estimatedPrerollMs;
+            scheduler.queueEvent(swapEvent, nextTime);
             swapping = false;
           })
         }, { once: true })
@@ -228,12 +229,12 @@ class App {
       next.video.currentTime = nextPlot.startTime;
     };
 
+    // This actually kicks everything off, the queue is empty at start.
     scheduler.onEmpty = (queueEvent) => {
       if (swapping) return;
       dbg('onempty');
       queueEvent(swapEvent, scheduler.currentTime);
     };
-    scheduler.queueEvent(swapEvent, plot.durationMs - estimatedPrerollMs);
 
     this.applySound();
     this.play();
