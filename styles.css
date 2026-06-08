@@ -1,6 +1,14 @@
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
 :focus { outline: none; }
 
+a {
+  color: white;
+
+  &:visited {
+    color: white;
+  }
+}
+
 .stage {
   position: relative;
   width: 100%;
@@ -64,7 +72,7 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
   gap: 1em;
 
   position: absolute;
-  top: 10px;
+  top: 50px;
   left: calc(50% - var(--toggle-px)/2);
 
   opacity: 0.4;
@@ -106,7 +114,7 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
   left: 0;
   top: 0;
   width: 100vw;
-  padding: 56px 10px 10px 10px;
+  padding: 136px 50px 10px 50px;
   box-sizing: border-box;
   background-color: #333333;
   display: flex;
