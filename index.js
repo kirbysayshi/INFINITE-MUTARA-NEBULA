@@ -166,7 +166,9 @@ class App {
       root,
       videos: root.querySelector('[data-videos]'),
       panel: root.querySelector('[data-panel]'),
+      toggles: root.querySelector('[data-toggles]'),
       toggleBtn: root.querySelector('[data-toggle]'),
+      unlockBtn: root.querySelector('[data-unlock]'),
       playBtn: root.querySelector('[data-play]'),
       renderer: root.querySelector('[data-renderer]'),
     };
@@ -184,13 +186,30 @@ class App {
 
     els.panel.querySelectorAll('input[data-option]').forEach(input => {
       var key = input.dataset.option;
-      this.state.options[key] = input.checked;
+
+      // inefficient while in the loop, but it's fine
+      const search = new URLSearchParams(window.location.search);
+      const incoming = search.get(key);
+      if (incoming === null) {
+        this.state.options[key] = input.checked;
+      } else {
+        // sync url state BACK to DOM
+        const parsed = incoming === '1' ? true : false;
+        this.state.options[key] = parsed;
+        input.checked = parsed;
+      }
+
       input.addEventListener('change', () => {
         this.state.options[key] = input.checked;
         if (key === 'random2sec') this.state.scheduler.skip();
         if (key === 'sound') this.applySound();
+        const search = new URLSearchParams(window.location.search);
+        search.set(key, input.checked ? 1 : 0);
+        window.history.replaceState(null, '', `?${search.toString()}`);
       });
     });
+
+    this.maybeShowAudioUnlock();
 
     const ctx = els.renderer.getContext('2d');
     const render = () => {
@@ -309,13 +328,16 @@ class App {
   pause () {
     this.state.els.playBtn.textContent = '▶︎';
     this.state.scheduler.pause();
+    this.stopAudio();
     return this.getActive().video.pause();
   }
 
   play () {
     this.state.els.playBtn.textContent = '⏸︎';
     this.state.scheduler.start();
-    return this.getActive().video.play();
+    const active = this.getActive();
+    this.startAudio(active, active.video.currentTime);
+    return active.video.play();
   }
 
   togglePlay () {
@@ -323,7 +345,7 @@ class App {
     else this.pause();
   }
 
-  initAudioGraph () {
+  ensureAudioGraph () {
     if (this.state.audio) return;
     var ctx = this.state.audioCtx;
     var master = ctx.createGain();
@@ -333,6 +355,7 @@ class App {
   }
 
   stopAudio () {
+    this.ensureAudioGraph();
     var a = this.state.audio;
     if (a && a.activeSource) {
       try { a.activeSource.stop(); } catch (e) {}
@@ -341,7 +364,8 @@ class App {
   }
 
   startAudio (clip, offset) {
-    if (!this.state.options.sound || !this.state.audio) return;
+    this.ensureAudioGraph();
+    if (!this.state.options.sound) return;
     this.stopAudio();
     if (!clip.audioBuffer) return;
     var { ctx, master } = this.state.audio;
@@ -353,7 +377,7 @@ class App {
   }
 
   applySound () {
-    this.initAudioGraph();
+    this.ensureAudioGraph();
     var { ctx, master } = this.state.audio;
     if (ctx.state === 'suspended') ctx.resume();
     master.gain.value = this.state.options.sound ? 1 : 0;
@@ -366,10 +390,22 @@ class App {
   }
 
   togglePanel () {
-    var { panel, toggleBtn } = this.state.els;
+    var { panel, toggleBtn, toggles } = this.state.els;
     var hidden = panel.classList.toggle('controls--hidden');
-    toggleBtn.classList.toggle('toggle-btn--open', !hidden);
+    toggles.classList.toggle('toggles--open', !hidden);
     toggleBtn.textContent = hidden ? '?' : 'X';
+  }
+
+  maybeShowAudioUnlock() {
+    this.ensureAudioGraph();
+    var { unlockBtn } = this.state.els;
+    if (this.state.audio.ctx.state === 'suspended' && this.state.options.sound) {
+      unlockBtn.classList.toggle('u--shown');
+      unlockBtn.addEventListener('click', () => {
+        unlockBtn.classList.toggle('u--shown');
+        this.applySound();
+      }, { once: true});
+    }
   }
 }
 
